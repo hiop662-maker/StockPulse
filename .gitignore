@@ -1,0 +1,25 @@
+﻿# Dependencies
+node_modules/
+client/node_modules/
+
+# Next.js build
+.next/
+client/.next/
+out/
+
+# Python / Server
+server/venv/
+server/__pycache__/
+server/*.pyc
+server/.pytest_cache/
+
+# Environment variables & secrets
+.env
+.env*.local
+server/.env
+client/.env*.local
+
+# IDE & OS
+.vscode/
+.DS_Store
+Thumbs.db
