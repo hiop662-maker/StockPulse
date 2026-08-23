@@ -1,27 +1,37 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.api.chat import router as chat_router
 from app.api.market import router as market_router
 from app.core.config import settings
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
 )
 
+# CORS-Origins zusammenführen & Next.js Dev-Server absichern
+origins = list(settings.CORS_ORIGINS) if hasattr(settings, "CORS_ORIGINS") else []
+for default_origin in [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+]:
+    if default_origin not in origins:
+        origins.append(default_origin)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Router einbinden
+# Router unter /api einbinden (/api/market/... & /api/chat/...)
 app.include_router(market_router, prefix=settings.API_V1_STR)
 app.include_router(chat_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/health")
 def health_check():
-  return {"status": "healthy", "service": "StockPulse Backend"}
+    return {"status": "healthy", "service": "StockPulse Backend"}
