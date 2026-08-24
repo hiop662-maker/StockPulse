@@ -11,6 +11,7 @@ import {
 import { formatCurrency, formatNumber, SupportedCurrency } from "@/lib/utils";
 import { StockChart } from "@/components/StockChart";
 import { AiChatDrawer } from "@/components/AiChatDrawer";
+import { MetricTooltip } from "@/components/MetricTooltip";
 import {
   Search,
   Sparkles,
@@ -71,8 +72,18 @@ export default function Dashboard() {
   const forwardPE = quote?.forwardPE ?? quote?.pe_forward;
   const low52 = quote?.fiftyTwoWeekLow ?? quote?.fifty_two_week_low;
   const high52 = quote?.fiftyTwoWeekHigh ?? quote?.fifty_two_week_high;
+  
+  const rawRecommendation =
+    quote?.recommendationKey ??
+    quote?.recommendation_key ??
+    (quote as any)?.recommendation ??
+    "N/A";
+
   const recommendation =
-    quote?.recommendationKey ?? quote?.recommendation_key ?? "N/A";
+    rawRecommendation && rawRecommendation !== "none"
+      ? String(rawRecommendation).replace(/_/g, " ")
+      : "N/A";
+
   const quoteName = quote?.name || quote?.shortName || ticker;
 
   return (
@@ -159,11 +170,11 @@ export default function Dashboard() {
           </div>
 
           <div className="flex bg-slate-900 border border-slate-800 rounded-lg p-1 gap-1">
-            {["1mo", "3mo", "6mo", "1y"].map((p) => (
+            {["1mo", "3mo", "6mo", "1y", "ytd", "max"].map((p) => (
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition ${
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition ${
                   period === p
                     ? "bg-indigo-600 text-white"
                     : "text-slate-400 hover:text-white"
@@ -175,20 +186,26 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Metric Cards */}
+        {/* Metric Cards mit Tooltips */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-400 mb-1">
-              <DollarSign className="w-3.5 h-3.5 text-indigo-400" />
-              Marktkapitalisierung
+            <div className="flex items-center justify-between text-xs font-medium text-slate-400 mb-1">
+              <span className="flex items-center gap-1.5">
+                <DollarSign className="w-3.5 h-3.5 text-indigo-400" />
+                Marktkapitalisierung
+              </span>
+              <MetricTooltip text="Der rechnerische Gesamtwert des Unternehmens an der Börse (Aktienkurs multipliziert mit der Anzahl aller ausgegebenen Aktien)." />
             </div>
             <div className="text-lg font-bold">{formatNumber(marketCap)}</div>
           </div>
 
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-400 mb-1">
-              <Activity className="w-3.5 h-3.5 text-emerald-400" />
-              KGV (Trailing / Forward)
+            <div className="flex items-center justify-between text-xs font-medium text-slate-400 mb-1">
+              <span className="flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                KGV (Trailing / Forward)
+              </span>
+              <MetricTooltip text="Kurs-Gewinn-Verhältnis: Trailing basiert auf den realen Gewinnen der letzten 12 Monate, Forward auf den geschätzten Gewinnen der nächsten 12 Monate." />
             </div>
             <div className="text-lg font-bold">
               {trailingPE ? trailingPE.toFixed(1) : "N/A"} /{" "}
@@ -197,9 +214,12 @@ export default function Dashboard() {
           </div>
 
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-400 mb-1">
-              <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
-              52-Wochen Spanne
+            <div className="flex items-center justify-between text-xs font-medium text-slate-400 mb-1">
+              <span className="flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
+                52-Wochen Spanne
+              </span>
+              <MetricTooltip text="Der tiefste und höchste gehandelte Kurs des Wertpapiers innerhalb der letzten 52 Kalenderwochen." />
             </div>
             <div className="text-sm font-semibold">
               {formatCurrency(
@@ -219,12 +239,15 @@ export default function Dashboard() {
           </div>
 
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
-            <div className="flex items-center gap-2 text-xs font-medium text-slate-400 mb-1">
-              <BarChart2 className="w-3.5 h-3.5 text-blue-400" />
-              Analysten-Konsens
+            <div className="flex items-center justify-between text-xs font-medium text-slate-400 mb-1">
+              <span className="flex items-center gap-1.5">
+                <BarChart2 className="w-3.5 h-3.5 text-blue-400" />
+                Analysten-Konsens
+              </span>
+              <MetricTooltip text="Die durchschnittliche Einstufung institutioneller Finanzanalysten (z. B. Strong Buy, Buy, Hold, Sell)." />
             </div>
             <div className="text-lg font-bold capitalize">
-              {recommendation.replace("_", " ")}
+              {recommendation}
             </div>
           </div>
         </div>
