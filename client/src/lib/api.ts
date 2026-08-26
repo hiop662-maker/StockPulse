@@ -1,33 +1,44 @@
-﻿const BASE_URL = "http://localhost:8000/api";
+﻿const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
 export interface StockQuote {
   symbol: string;
   name?: string;
   shortName?: string;
+  currency: string;
   currentPrice?: number;
   current_price?: number;
-  currency?: string;
-  trailingPE?: number;
-  forwardPE?: number;
-  pe_trailing?: number;
-  pe_forward?: number;
   marketCap?: number;
   market_cap?: number;
-  fiftyTwoWeekHigh?: number;
+  trailingPE?: number;
+  pe_trailing?: number;
+  forwardPE?: number;
+  pe_forward?: number;
   fiftyTwoWeekLow?: number;
-  fifty_two_week_high?: number;
   fifty_two_week_low?: number;
+  fiftyTwoWeekHigh?: number;
+  fifty_two_week_high?: number;
   recommendationKey?: string;
   recommendation_key?: string;
 }
 
 export interface ChartPoint {
-  Date: string;
-  Close: number;
-  Open: number;
-  High: number;
-  Low: number;
-  Volume: number;
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  [key: string]: any;
+}
+
+export interface ChatMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
+export interface AiAdvisorResponse {
+  reply: string;
+  symbol: string;
 }
 
 export async function fetchStockQuote(ticker: string): Promise<StockQuote> {
@@ -36,30 +47,46 @@ export async function fetchStockQuote(ticker: string): Promise<StockQuote> {
   return res.json();
 }
 
-export async function fetchStockHistory(ticker: string, period = "6mo"): Promise<ChartPoint[]> {
+export async function fetchStockHistory(
+  ticker: string,
+  period: string = "6mo"
+): Promise<ChartPoint[]> {
   const res = await fetch(`${BASE_URL}/market/history/${ticker}?period=${period}`);
-  if (!res.ok) throw new Error(`Fehler beim Laden des Kursverlaufs für ${ticker}`);
+  if (!res.ok) throw new Error(`Fehler beim Laden der Historie für ${ticker}`);
   return res.json();
 }
 
-export async function fetchFxRate(pair = "EURUSD=X"): Promise<number> {
+export async function fetchFxRate(pair: string = "EURUSD=X"): Promise<number> {
   try {
-    const res = await fetch(`${BASE_URL}/market/fx-rate?pair=${pair}`);
+    const res = await fetch(`${BASE_URL}/market/fx/${pair}`);
     if (!res.ok) return 1.08;
     const data = await res.json();
-    return data.rate || 1.08;
-  } catch (err) {
-    console.error("Fehler beim Laden des Wechselkurses, nutze Fallback:", err);
+    return data.rate ?? 1.08;
+  } catch {
     return 1.08;
   }
 }
 
-export async function askFinancialAgent(prompt: string): Promise<{ prompt: string; analysis: string }> {
-  const res = await fetch(`${BASE_URL}/chat/ask`, {
+export async function askAiAdvisor(
+  symbol: string,
+  question: string,
+  history: ChatMessage[] = []
+): Promise<AiAdvisorResponse> {
+  const res = await fetch(`${BASE_URL}/ai/advisor`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      symbol: symbol.toUpperCase(),
+      question,
+      history,
+    }),
   });
-  if (!res.ok) throw new Error("Fehler bei der KI-Analyse");
+
+  if (!res.ok) {
+    throw new Error(`Fehler bei der KI-Anfrage: ${res.statusText}`);
+  }
+
   return res.json();
 }

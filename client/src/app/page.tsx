@@ -42,7 +42,7 @@ export default function Dashboard() {
     initFxRate();
   }, []);
 
-  // 2. Marktdaten bei Änderung von Ticker oder Zeitraum laden
+// 2. Marktdaten bei Änderung von Ticker oder Zeitraum laden
   useEffect(() => {
     async function loadData() {
       try {
@@ -53,7 +53,9 @@ export default function Dashboard() {
         setQuote(quoteData);
         setHistory(historyData);
       } catch (err) {
-        console.error("Fehler beim Laden der Dashboard-Daten:", err);
+        console.warn("Fehler beim Laden der Dashboard-Daten:", err);
+        // Optional: Leere Historie setzen, damit der Chart nicht abstürzt
+        setHistory([]);
       }
     }
     loadData();

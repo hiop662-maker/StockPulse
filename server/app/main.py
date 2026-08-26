@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.api.ai import router as ai_router
 from app.api.chat import router as chat_router
 from app.api.market import router as market_router
 from app.core.config import settings
@@ -10,7 +11,9 @@ app = FastAPI(
 )
 
 # CORS-Origins zusammenführen & Next.js Dev-Server absichern
-origins = list(settings.CORS_ORIGINS) if hasattr(settings, "CORS_ORIGINS") else []
+origins = (
+    list(settings.CORS_ORIGINS) if hasattr(settings, "CORS_ORIGINS") else []
+)
 for default_origin in [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -27,9 +30,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Router unter /api einbinden (/api/market/... & /api/chat/...)
+# Router unter /api einbinden (/api/market/..., /api/chat/... & /api/ai/...)
 app.include_router(market_router, prefix=settings.API_V1_STR)
 app.include_router(chat_router, prefix=settings.API_V1_STR)
+app.include_router(ai_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/health")

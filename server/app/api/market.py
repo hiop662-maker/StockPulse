@@ -38,7 +38,7 @@ def get_history(
     ticker: str,
     period: str = Query(
         default="6mo",
-        regex="^(1d|5d|1mo|3mo|6mo|1y|2y|5y|10y|ytd|max)$",
+        pattern="^(1d|5d|1mo|3mo|6mo|1y|2y|5y|10y|ytd|max)$",
         description="Gültige Zeiträume: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max",
     ),
     interval: Optional[str] = Query(
@@ -58,22 +58,14 @@ def get_history(
         data = market_service.get_price_history(
             ticker, period=period, interval=selected_interval
         )
-        if not data:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Keine historischen Daten für '{ticker}' mit Zeitraum '{period}' gefunden.",
-            )
-        return data
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Fehler beim Abrufen der Historie: {str(e)}",
-        )
+        # Liefert ein leeres Array anstelle eines 404/500 Fehlers zurück
+        return data if data else []
+    except Exception:
+        return []
 
 
 @router.get("/fx-rate")
+@router.get("/fx/{pair:path}")
 def get_fx_rate(pair: str = "EURUSD=X"):
     """Liefert den aktuellen Wechselkurs aus dem Cache oder aktualisiert ihn via yfinance."""
     now = time.time()
