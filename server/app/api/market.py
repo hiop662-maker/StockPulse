@@ -1,6 +1,7 @@
 import time
-import yfinance as yf
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
+import yfinance as yf
 from app.services.market_data import market_service
 
 router = APIRouter(prefix="/market", tags=["Market Data"])
@@ -9,7 +10,7 @@ router = APIRouter(prefix="/market", tags=["Market Data"])
 _FX_CACHE = {
     "rate": 1.08,
     "last_updated": 0.0,
-    "ttl_seconds": 3600
+    "ttl_seconds": 3600,
 }
 
 
@@ -23,6 +24,8 @@ def get_quote(ticker: str):
                 detail=f"Ticker '{ticker}' nicht gefunden oder keine Kursdaten verfügbar.",
             )
         return data
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -34,23 +37,39 @@ def get_quote(ticker: str):
 def get_history(
     ticker: str,
     period: str = Query(
-        "1y", description="Gültige Intervalle: 1mo, 3mo, 6mo, 1y, 5y, max"
+        default="6mo",
+        regex="^(1d|5d|1mo|3mo|6mo|1y|2y|5y|10y|ytd|max)$",
+        description="Gültige Zeiträume: 1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max",
     ),
-    interval: str = Query("1d", description="Gültige Schritte: 1d, 1wk, 1mo"),
+    interval: Optional[str] = Query(
+        default=None,
+        description="Gültige Schritte: 1d, 1wk, 1mo (wird bei None automatisch optimiert)",
+    ),
 ):
     try:
+        # Dynamische Schrittweite für Langzeit-Performance (z. B. bei MAX)
+        selected_interval = interval
+        if not selected_interval:
+            if period == "max":
+                selected_interval = "1wk"
+            else:
+                selected_interval = "1d"
+
         data = market_service.get_price_history(
-            ticker, period=period, interval=interval
+            ticker, period=period, interval=selected_interval
         )
         if not data:
             raise HTTPException(
                 status_code=404,
-                detail=f"Keine historischen Daten für '{ticker}' gefunden.",
+                detail=f"Keine historischen Daten für '{ticker}' mit Zeitraum '{period}' gefunden.",
             )
         return data
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
-            status_code=500, detail=f"Fehler beim Abrufen der Historie: {str(e)}"
+            status_code=500,
+            detail=f"Fehler beim Abrufen der Historie: {str(e)}",
         )
 
 
@@ -58,11 +77,11 @@ def get_history(
 def get_fx_rate(pair: str = "EURUSD=X"):
     """Liefert den aktuellen Wechselkurs aus dem Cache oder aktualisiert ihn via yfinance."""
     now = time.time()
-    
+
     # 1. Cache-Treffer: Sofortige Antwort (< 2ms)
     if now - _FX_CACHE["last_updated"] < _FX_CACHE["ttl_seconds"]:
         return {"pair": pair, "rate": _FX_CACHE["rate"], "cached": True}
-    
+
     # 2. Cache abgelaufen: Aktualisieren
     try:
         ticker = yf.Ticker(pair)
