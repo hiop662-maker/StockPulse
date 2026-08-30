@@ -90,3 +90,50 @@ export async function askAiAdvisor(
 
   return res.json();
 }
+
+/**
+ * Streamt die Antwort des KI-Analysten Token für Token
+ */
+export async function streamAiAdvisor(
+  symbol: string,
+  question: string,
+  history: ChatMessage[] = [],
+  onChunk: (chunk: string) => void
+): Promise<void> {
+  const res = await fetch(`${BASE_URL}/ai/advisor/stream`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      symbol: symbol.toUpperCase(),
+      question,
+      history,
+    }),
+  });
+
+  if (!res.ok || !res.body) {
+    throw new Error(`Fehler bei der Streaming-Anfrage: ${res.statusText}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n\n");
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        const data = line.replace("data: ", "");
+        if (data === "[DONE]") return;
+        onChunk(data);
+      }
+    }
+  }
+}

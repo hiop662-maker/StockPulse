@@ -11,7 +11,7 @@ import {
   Layers,
   FileText,
 } from "lucide-react";
-import { askAiAdvisor, ChatMessage } from "@/lib/api";
+import { streamAiAdvisor, ChatMessage } from "@/lib/api";
 
 interface AiChatDrawerProps {
   currentSymbol: string;
@@ -39,7 +39,7 @@ export function AiChatDrawer({ currentSymbol, isOpen }: AiChatDrawerProps) {
     {
       label: "Technischer Chart-Check",
       icon: <TrendingUp className="w-3.5 h-3.5 text-amber-400 shrink-0" />,
-      prompt: `Analysiere die technische Lage für ${currentSymbol}. Beurteile den Trend anhand relevanter Durchschnitte (SMA 50, SMA 200) und des Momentum-Indikators RSI (14).`,
+      prompt: `Analysiere die Lage für ${currentSymbol} anhand relevanter Durchschnitte (SMA 50, SMA 200) und des Momentum-Indikators RSI (14).`,
     },
     {
       label: "Risiko-Assessment",
@@ -62,34 +62,52 @@ export function AiChatDrawer({ currentSymbol, isOpen }: AiChatDrawerProps) {
     if (!textToSend.trim() || isLoading) return;
 
     const userMsg: ChatMessage = { role: "user", content: textToSend };
-    setMessages((prev) => [...prev, userMsg]);
+    const chatHistory = messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    // User-Message sofort anzeigen + leere Assistant-Nachricht anlegen
+    setMessages((prev) => [
+      ...prev,
+      userMsg,
+      { role: "assistant", content: "" },
+    ]);
     if (!messageText) setInput("");
     setIsLoading(true);
 
     try {
-      const chatHistory = messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
-      const response = await askAiAdvisor(
+      await streamAiAdvisor(
         currentSymbol,
         textToSend,
-        chatHistory
+        chatHistory,
+        (chunk: string) => {
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastIdx = updated.length - 1;
+            if (lastIdx >= 0 && updated[lastIdx].role === "assistant") {
+              updated[lastIdx] = {
+                ...updated[lastIdx],
+                content: updated[lastIdx].content + chunk,
+              };
+            }
+            return updated;
+          });
+        }
       );
-      const assistantMsg: ChatMessage = {
-        role: "assistant",
-        content: response.reply,
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
     } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content:
-            "Entschuldigung, bei der KI-Analyse ist ein Fehler aufgetreten. Bitte prüfe das Backend.",
-        },
-      ]);
+      setMessages((prev) => {
+        const updated = [...prev];
+        const lastIdx = updated.length - 1;
+        if (lastIdx >= 0 && updated[lastIdx].role === "assistant") {
+          updated[lastIdx] = {
+            ...updated[lastIdx],
+            content:
+              "Entschuldigung, beim Laden der Antwort ist ein Fehler aufgetreten.",
+          };
+        }
+        return updated;
+      });
     } finally {
       setIsLoading(false);
     }
@@ -161,7 +179,16 @@ export function AiChatDrawer({ currentSymbol, isOpen }: AiChatDrawerProps) {
                   : "bg-slate-950 border border-slate-800 text-slate-200 rounded-bl-none whitespace-pre-line"
               }`}
             >
-              {msg.content}
+              {/* Animierte Punkte nur anzeigen, wenn der Assistant-Text noch leer ist */}
+              {msg.role === "assistant" && !msg.content ? (
+                <div className="flex items-center gap-1.5 py-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce [animation-delay:0.2s]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce [animation-delay:0.4s]" />
+                </div>
+              ) : (
+                msg.content
+              )}
             </div>
             {msg.role === "user" && (
               <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300 shrink-0 mt-0.5">
@@ -170,19 +197,6 @@ export function AiChatDrawer({ currentSymbol, isOpen }: AiChatDrawerProps) {
             )}
           </div>
         ))}
-
-        {isLoading && (
-          <div className="flex gap-2.5 text-sm justify-start">
-            <div className="w-6 h-6 rounded-full bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
-              <Bot className="w-3.5 h-3.5" />
-            </div>
-            <div className="p-3 bg-slate-950 border border-slate-800 text-slate-400 rounded-xl rounded-bl-none text-xs flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" />
-              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce [animation-delay:0.2s]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce [animation-delay:0.4s]" />
-            </div>
-          </div>
-        )}
         <div ref={messagesEndRef} />
       </div>
 
