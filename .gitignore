@@ -23,3 +23,34 @@ client/.env*.local
 .vscode/
 .DS_Store
 Thumbs.db
+
+# SQLite Datenbanken & lokale Testdaten
+*.db
+*.sqlite
+*.sqlite3
+server/*.db
+
+# Umgebungsvariablen & Secrets
+.env
+.env.local
+.env.*.local
+server/.env
+client/.env.local
+
+# Python Cache & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+
+# Next.js & Node Dependencies
+node_modules/
+.next/
+out/
+build/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
