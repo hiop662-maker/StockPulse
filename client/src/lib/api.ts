@@ -232,3 +232,17 @@ export async function changePasswordApi(
   }
   return res.json();
 }
+
+export interface StockSearchResult {
+  symbol: string;
+  name: string;
+  exchange: string;
+  type_disp: string;
+}
+
+export async function searchStocksApi(query: string): Promise<StockSearchResult[]> {
+  if (!query.trim()) return [];
+  const res = await fetch(`${BASE_URL}/stocks/search?q=${encodeURIComponent(query)}`);
+  if (!res.ok) return [];
+  return res.json();
+}

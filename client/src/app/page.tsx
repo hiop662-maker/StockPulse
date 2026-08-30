@@ -13,8 +13,8 @@ import { StockChart } from "@/components/StockChart";
 import { AiChatDrawer } from "@/components/AiChatDrawer";
 import { MetricTooltip } from "@/components/MetricTooltip";
 import { UserMenu } from "@/components/UserMenu";
+import { StockSearch } from "@/components/StockSearch";
 import {
-  Search,
   Sparkles,
   TrendingUp,
   DollarSign,
@@ -24,7 +24,6 @@ import {
 
 export default function Dashboard() {
   const [ticker, setTicker] = useState("NVDA");
-  const [searchInput, setSearchInput] = useState("NVDA");
   const [quote, setQuote] = useState<StockQuote | null>(null);
   const [history, setHistory] = useState<ChartPoint[]>([]);
   const [period, setPeriod] = useState("6mo");
@@ -61,13 +60,6 @@ export default function Dashboard() {
     loadData();
   }, [ticker, period]);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchInput.trim()) {
-      setTicker(searchInput.trim().toUpperCase());
-    }
-  };
-
   const currentPrice = quote?.currentPrice ?? quote?.current_price;
   const marketCap = quote?.marketCap ?? quote?.market_cap;
   const trailingPE = quote?.trailingPE ?? quote?.pe_trailing;
@@ -99,17 +91,13 @@ export default function Dashboard() {
           </span>
         </div>
 
-        {/* Ticker Search */}
-        <form onSubmit={handleSearch} className="relative w-72">
-          <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
-          <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Ticker (z.B. IONQ, AAPL, MSFT)..."
-            className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-4 py-1.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+        {/* Intelligente Aktiensuche (Name & Ticker) */}
+        <div className="w-80">
+          <StockSearch
+            onSelectStock={(symbol) => setTicker(symbol)}
+            currentSymbol={ticker}
           />
-        </form>
+        </div>
 
         {/* Actions (Währung, AI Drawer Button & User Profil-Menü) */}
         <div className="flex items-center gap-3">
