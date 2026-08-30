@@ -137,3 +137,98 @@ export async function streamAiAdvisor(
     }
   }
 }
+
+export interface User {
+  id: number;
+  username: string | null;
+  email: string;
+  avatar_url: string | null;
+  created_at?: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  user: User;
+}
+
+export async function loginApi(email: string, password: string): Promise<AuthResponse> {
+  const res = await fetch(`${BASE_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Login fehlgeschlagen");
+  }
+  return res.json();
+}
+
+export async function registerApi(
+  email: string,
+  password: string,
+  username?: string
+): Promise<AuthResponse> {
+  const res = await fetch(`${BASE_URL}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, username: username || undefined }),
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Registrierung fehlgeschlagen");
+  }
+  return res.json();
+}
+
+export async function getMeApi(token: string): Promise<User> {
+  const res = await fetch(`${BASE_URL}/auth/me`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!res.ok) {
+    throw new Error("Sitzung abgelaufen");
+  }
+  return res.json();
+}
+
+export async function updateProfileApi(
+  token: string,
+  data: { username?: string; avatar_url?: string }
+): Promise<User> {
+  const res = await fetch(`${BASE_URL}/auth/profile`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Fehler beim Aktualisieren des Profils.");
+  }
+  return res.json();
+}
+
+export async function changePasswordApi(
+  token: string,
+  data: { current_password: string; new_password: string }
+): Promise<{ message: string }> {
+  const res = await fetch(`${BASE_URL}/auth/password`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Fehler beim Ändern des Passworts.");
+  }
+  return res.json();
+}

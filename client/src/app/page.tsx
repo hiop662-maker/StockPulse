@@ -12,6 +12,7 @@ import { formatCurrency, formatNumber, SupportedCurrency } from "@/lib/utils";
 import { StockChart } from "@/components/StockChart";
 import { AiChatDrawer } from "@/components/AiChatDrawer";
 import { MetricTooltip } from "@/components/MetricTooltip";
+import { UserMenu } from "@/components/UserMenu";
 import {
   Search,
   Sparkles,
@@ -42,7 +43,7 @@ export default function Dashboard() {
     initFxRate();
   }, []);
 
-// 2. Marktdaten bei Änderung von Ticker oder Zeitraum laden
+  // 2. Marktdaten bei Änderung von Ticker oder Zeitraum laden
   useEffect(() => {
     async function loadData() {
       try {
@@ -54,7 +55,6 @@ export default function Dashboard() {
         setHistory(historyData);
       } catch (err) {
         console.warn("Fehler beim Laden der Dashboard-Daten:", err);
-        // Optional: Leere Historie setzen, damit der Chart nicht abstürzt
         setHistory([]);
       }
     }
@@ -74,7 +74,7 @@ export default function Dashboard() {
   const forwardPE = quote?.forwardPE ?? quote?.pe_forward;
   const low52 = quote?.fiftyTwoWeekLow ?? quote?.fifty_two_week_low;
   const high52 = quote?.fiftyTwoWeekHigh ?? quote?.fifty_two_week_high;
-  
+
   const rawRecommendation =
     quote?.recommendationKey ??
     quote?.recommendation_key ??
@@ -111,12 +111,12 @@ export default function Dashboard() {
           />
         </form>
 
-        {/* Actions (Währung & AI Drawer Button) */}
+        {/* Actions (Währung, AI Drawer Button & User Profil-Menü) */}
         <div className="flex items-center gap-3">
           <div className="flex bg-slate-900 border border-slate-800 rounded-lg p-0.5">
             <button
               onClick={() => setDisplayCurrency("USD")}
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition ${
+              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition cursor-pointer ${
                 displayCurrency === "USD"
                   ? "bg-indigo-600 text-white"
                   : "text-slate-400 hover:text-white"
@@ -126,7 +126,7 @@ export default function Dashboard() {
             </button>
             <button
               onClick={() => setDisplayCurrency("EUR")}
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition ${
+              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition cursor-pointer ${
                 displayCurrency === "EUR"
                   ? "bg-indigo-600 text-white"
                   : "text-slate-400 hover:text-white"
@@ -138,15 +138,18 @@ export default function Dashboard() {
 
           <button
             onClick={() => setIsChatOpen((prev) => !prev)}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-medium transition cursor-pointer ${
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
               isChatOpen
                 ? "bg-indigo-500 text-white ring-2 ring-indigo-400/50"
                 : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20"
             }`}
           >
-            <Sparkles className="w-4 h-4" />
+            <Sparkles className="w-3.5 h-3.5" />
             KI-Analyse
           </button>
+
+          {/* User Profil & Authentifizierung */}
+          <UserMenu />
         </div>
       </header>
 
@@ -176,7 +179,7 @@ export default function Dashboard() {
               <button
                 key={p}
                 onClick={() => setPeriod(p)}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md transition ${
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition cursor-pointer ${
                   period === p
                     ? "bg-indigo-600 text-white"
                     : "text-slate-400 hover:text-white"
