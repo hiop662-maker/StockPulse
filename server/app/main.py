@@ -4,9 +4,11 @@ from app.api.ai import router as ai_router
 from app.api.auth import router as auth_router
 from app.api.chat import router as chat_router
 from app.api.market import router as market_router
+from app.api.stocks import router as stocks_router
+from app.api.watchlist import router as watchlist_router
 from app.core.config import settings
 from app.db.session import Base, engine
-from app.api.stocks import router as stocks_router
+import app.db.models  # Stellt sicher, dass Watchlist & User registriert sind
 
 # SQLite / DB-Tabellen beim Start automatisch anlegen
 Base.metadata.create_all(bind=engine)
@@ -41,6 +43,8 @@ app.include_router(market_router, prefix=settings.API_V1_STR)
 app.include_router(chat_router, prefix=settings.API_V1_STR)
 app.include_router(ai_router, prefix=settings.API_V1_STR)
 app.include_router(stocks_router, prefix=settings.API_V1_STR)
+app.include_router(watchlist_router, prefix=settings.API_V1_STR)
+
 
 @app.get("/health")
 def health_check():
