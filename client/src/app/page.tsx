@@ -6,8 +6,12 @@ import {
   fetchStockHistory,
   fetchStockQuote,
   fetchFxRate,
+  fetchWatchlist,
+  addToWatchlist,
+  removeFromWatchlist,
   StockQuote,
   ChartPoint,
+  WatchlistItem,
 } from "@/lib/api";
 import { formatCurrency, formatNumber, SupportedCurrency } from "@/lib/utils";
 import { StockChart } from "@/components/StockChart";
@@ -16,6 +20,7 @@ import { MetricTooltip } from "@/components/MetricTooltip";
 import { UserMenu } from "@/components/UserMenu";
 import { StockSearch } from "@/components/StockSearch";
 import { StockErrorState } from "@/components/StockErrorState";
+import { WatchlistBar } from "@/components/WatchlistBar";
 import {
   Sparkles,
   TrendingUp,
@@ -23,6 +28,7 @@ import {
   Activity,
   BarChart2,
   Loader2,
+  RefreshCw,
 } from "lucide-react";
 
 function DashboardContent() {
@@ -42,9 +48,38 @@ function DashboardContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
+  // Auto-Refresh & Polling States (#27)
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [refreshIntervalSec] = useState(30);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+
   // Währungsauswahl & Wechselkurs
   const [displayCurrency, setDisplayCurrency] = useState<SupportedCurrency>("USD");
   const [fxRate, setFxRate] = useState<number>(1.08);
+
+  // Watchlist States (#22)
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  const [watchlistLoading, setWatchlistLoading] = useState(false);
+
+  // Watchlist beim Start laden
+  useEffect(() => {
+    async function initWatchlist() {
+      const token = localStorage.getItem("stockpulse_token");
+      if (!token) return;
+
+      setWatchlistLoading(true);
+      try {
+        const items = await fetchWatchlist();
+        setWatchlist(items);
+      } catch (err) {
+        console.warn("Watchlist konnte nicht geladen werden:", err);
+      } finally {
+        setWatchlistLoading(false);
+      }
+    }
+    initWatchlist();
+  }, []);
 
   // URL synchronisieren, wenn ein neuer Ticker ausgewählt wird
   const updateUrlSymbol = useCallback(
@@ -65,7 +100,45 @@ function DashboardContent() {
     updateUrlSymbol(cleanSymbol);
   };
 
-  // Browser-Historie (Vor/Zurück-Buttons) synchron halten
+  // Watchlist Handlers (#22)
+  const isCurrentSaved = watchlist.some(
+    (item) => item.symbol.toUpperCase() === ticker.toUpperCase()
+  );
+
+  const handleToggleWatchlist = async () => {
+    const token = localStorage.getItem("stockpulse_token");
+    if (!token) {
+      alert("Bitte logge dich ein, um Favoriten in deiner Watchlist zu speichern.");
+      return;
+    }
+
+    const clean = ticker.trim().toUpperCase();
+    try {
+      if (isCurrentSaved) {
+        await removeFromWatchlist(clean);
+        setWatchlist((prev) => prev.filter((i) => i.symbol.toUpperCase() !== clean));
+      } else {
+        const newItem = await addToWatchlist(clean);
+        setWatchlist((prev) => [...prev, newItem]);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Fehler bei der Watchlist-Aktion";
+      alert(message);
+    }
+  };
+
+  const handleRemoveWatchlistSymbol = async (symbol: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const clean = symbol.trim().toUpperCase();
+    try {
+      await removeFromWatchlist(clean);
+      setWatchlist((prev) => prev.filter((i) => i.symbol.toUpperCase() !== clean));
+    } catch (err) {
+      console.warn("Fehler beim Entfernen aus der Watchlist:", err);
+    }
+  };
+
+  // Browser-Historie synchron halten
   useEffect(() => {
     const symbolFromUrl = searchParams.get("symbol")?.toUpperCase();
     if (symbolFromUrl && symbolFromUrl !== ticker) {
@@ -82,7 +155,7 @@ function DashboardContent() {
     initFxRate();
   }, []);
 
-  // Marktdaten bei Änderung von Ticker oder Zeitraum laden mit robuster Validierung
+  // Marktdaten bei Ticker- oder Periodenwechsel laden
   const loadData = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -100,6 +173,7 @@ function DashboardContent() {
 
       setQuote(quoteData);
       setHistory(historyData || []);
+      setLastUpdated(new Date());
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Fehler beim Laden der Marktdaten";
       console.warn("Fehler beim Laden der Dashboard-Daten:", message);
@@ -114,6 +188,35 @@ function DashboardContent() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Sanfter Refresh für Quotes (ohne harten Vollbild-Loader)
+  const refreshQuoteOnly = useCallback(async () => {
+    try {
+      setIsRefreshing(true);
+      const quoteData = await fetchStockQuote(ticker);
+      if (quoteData && (quoteData.currentPrice || quoteData.current_price)) {
+        setQuote(quoteData);
+        setLastUpdated(new Date());
+      }
+    } catch (err) {
+      console.warn("Auto-Refresh fehlgeschlagen:", err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [ticker]);
+
+  // Polling-Intervall mit Tab-Visibility-Check
+  useEffect(() => {
+    if (!autoRefresh || fetchError) return;
+
+    const intervalId = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        refreshQuoteOnly();
+      }
+    }, refreshIntervalSec * 1000);
+
+    return () => clearInterval(intervalId);
+  }, [autoRefresh, refreshIntervalSec, refreshQuoteOnly, fetchError]);
 
   const currentPrice = quote?.currentPrice ?? quote?.current_price;
   const marketCap = quote?.marketCap ?? quote?.market_cap;
@@ -156,8 +259,38 @@ function DashboardContent() {
           />
         </div>
 
-        {/* Actions (Währung, AI Drawer Button & User Profil-Menü) */}
+        {/* Actions (Auto-Refresh, Währung, AI Drawer Button & User Profil) */}
         <div className="flex items-center gap-3">
+          {/* Auto-Refresh & Live-Indikator */}
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1">
+            <button
+              type="button"
+              onClick={refreshQuoteOnly}
+              disabled={isRefreshing}
+              title={`Letzte Aktualisierung: ${lastUpdated.toLocaleTimeString("de-DE")}`}
+              className="text-slate-400 hover:text-white transition disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw
+                className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-indigo-400" : ""}`}
+              />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setAutoRefresh((prev) => !prev)}
+              className={`text-[11px] font-medium px-1.5 py-0.5 rounded transition cursor-pointer flex items-center gap-1.5 ${
+                autoRefresh
+                  ? "text-emerald-400 bg-emerald-950/60 border border-emerald-800/60"
+                  : "text-slate-500 bg-slate-800/50 hover:text-slate-400"
+              }`}
+            >
+              {autoRefresh && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              )}
+              {autoRefresh ? "Live" : "Pause"}
+            </button>
+          </div>
+
           <div className="flex bg-slate-900 border border-slate-800 rounded-lg p-0.5">
             <button
               type="button"
@@ -196,10 +329,20 @@ function DashboardContent() {
             KI-Analyse
           </button>
 
-          {/* User Profil & Authentifizierung */}
           <UserMenu />
         </div>
       </header>
+
+      {/* Kompakte Watchlist-Pill-Leiste (#22) */}
+      <WatchlistBar
+        items={watchlist}
+        activeSymbol={ticker}
+        onSelectSymbol={handleSelectStock}
+        onRemoveSymbol={handleRemoveWatchlistSymbol}
+        onToggleCurrent={handleToggleWatchlist}
+        isCurrentSaved={isCurrentSaved}
+        isLoading={watchlistLoading}
+      />
 
       {/* Main Content */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
@@ -225,6 +368,9 @@ function DashboardContent() {
                   <h1 className="text-2xl font-bold">{quoteName}</h1>
                   <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
                     {quote?.symbol || ticker}
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Aktualisiert: {lastUpdated.toLocaleTimeString("de-DE")}
                   </span>
                 </div>
                 <div className="text-3xl font-extrabold mt-1">
