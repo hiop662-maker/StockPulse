@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   fetchStockHistory,
   fetchStockQuote,
@@ -22,8 +23,14 @@ import {
   BarChart2,
 } from "lucide-react";
 
-export default function Dashboard() {
-  const [ticker, setTicker] = useState("NVDA");
+function DashboardContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // 1. Initialen Ticker aus URL-Parameter 'symbol' lesen (Fallback: NVDA)
+  const initialSymbol = searchParams.get("symbol")?.toUpperCase() || "NVDA";
+  const [ticker, setTicker] = useState<string>(initialSymbol);
+
   const [quote, setQuote] = useState<StockQuote | null>(null);
   const [history, setHistory] = useState<ChartPoint[]>([]);
   const [period, setPeriod] = useState("6mo");
@@ -33,7 +40,34 @@ export default function Dashboard() {
   const [displayCurrency, setDisplayCurrency] = useState<SupportedCurrency>("USD");
   const [fxRate, setFxRate] = useState<number>(1.08);
 
-  // 1. Wechselkurs beim ersten Laden der App abrufen
+  // URL synchronisieren, wenn ein neuer Ticker ausgewählt wird
+  const updateUrlSymbol = useCallback(
+    (newSymbol: string) => {
+      const cleanSymbol = newSymbol.trim().toUpperCase();
+      const params = new URLSearchParams(searchParams.toString());
+      if (params.get("symbol")?.toUpperCase() !== cleanSymbol) {
+        params.set("symbol", cleanSymbol);
+        router.push(`/?${params.toString()}`, { scroll: false });
+      }
+    },
+    [router, searchParams]
+  );
+
+  const handleSelectStock = (symbol: string) => {
+    const cleanSymbol = symbol.trim().toUpperCase();
+    setTicker(cleanSymbol);
+    updateUrlSymbol(cleanSymbol);
+  };
+
+  // Browser-Historie (Vor/Zurück-Buttons) synchron halten
+  useEffect(() => {
+    const symbolFromUrl = searchParams.get("symbol")?.toUpperCase();
+    if (symbolFromUrl && symbolFromUrl !== ticker) {
+      setTicker(symbolFromUrl);
+    }
+  }, [searchParams, ticker]);
+
+  // Wechselkurs beim ersten Laden der App abrufen
   useEffect(() => {
     async function initFxRate() {
       const rate = await fetchFxRate("EURUSD=X");
@@ -42,7 +76,7 @@ export default function Dashboard() {
     initFxRate();
   }, []);
 
-  // 2. Marktdaten bei Änderung von Ticker oder Zeitraum laden
+  // Marktdaten bei Änderung von Ticker oder Zeitraum laden
   useEffect(() => {
     async function loadData() {
       try {
@@ -70,7 +104,7 @@ export default function Dashboard() {
   const rawRecommendation =
     quote?.recommendationKey ??
     quote?.recommendation_key ??
-    (quote as any)?.recommendation ??
+    (quote as unknown as { recommendation?: string })?.recommendation ??
     "N/A";
 
   const recommendation =
@@ -85,7 +119,9 @@ export default function Dashboard() {
       {/* Header */}
       <header className="border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-md sticky top-0 z-30 px-6 py-3 flex items-center justify-between h-[57px]">
         <div className="flex items-center gap-3">
-          <div className="bg-indigo-600 text-white p-1.5 px-2.5 rounded-lg font-bold text-sm">SP</div>
+          <div className="bg-indigo-600 text-white p-1.5 px-2.5 rounded-lg font-bold text-sm">
+            SP
+          </div>
           <span className="text-lg font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
             StockPulse
           </span>
@@ -94,7 +130,7 @@ export default function Dashboard() {
         {/* Intelligente Aktiensuche (Name & Ticker) */}
         <div className="w-80">
           <StockSearch
-            onSelectStock={(symbol) => setTicker(symbol)}
+            onSelectStock={handleSelectStock}
             currentSymbol={ticker}
           />
         </div>
@@ -103,6 +139,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-3">
           <div className="flex bg-slate-900 border border-slate-800 rounded-lg p-0.5">
             <button
+              type="button"
               onClick={() => setDisplayCurrency("USD")}
               className={`px-2.5 py-1 text-xs font-semibold rounded-md transition cursor-pointer ${
                 displayCurrency === "USD"
@@ -113,6 +150,7 @@ export default function Dashboard() {
               $ USD
             </button>
             <button
+              type="button"
               onClick={() => setDisplayCurrency("EUR")}
               className={`px-2.5 py-1 text-xs font-semibold rounded-md transition cursor-pointer ${
                 displayCurrency === "EUR"
@@ -125,6 +163,7 @@ export default function Dashboard() {
           </div>
 
           <button
+            type="button"
             onClick={() => setIsChatOpen((prev) => !prev)}
             className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
               isChatOpen
@@ -166,6 +205,7 @@ export default function Dashboard() {
             {["1mo", "3mo", "6mo", "1y", "ytd", "max"].map((p) => (
               <button
                 key={p}
+                type="button"
                 onClick={() => setPeriod(p)}
                 className={`px-2.5 py-1 text-xs font-medium rounded-md transition cursor-pointer ${
                   period === p
@@ -261,5 +301,19 @@ export default function Dashboard() {
         isOpen={isChatOpen}
       />
     </div>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400">
+          Lade Dashboard...
+        </div>
+      }
+    >
+      <DashboardContent />
+    </Suspense>
   );
 }
