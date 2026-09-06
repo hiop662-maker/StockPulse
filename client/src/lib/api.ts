@@ -246,3 +246,92 @@ export async function searchStocksApi(query: string): Promise<StockSearchResult[
   if (!res.ok) return [];
   return res.json();
 }
+
+// --- Watchlist Interfaces & Types (#21) ---
+
+export interface WatchlistItem {
+  id: number;
+  user_id: number;
+  symbol: string;
+  added_at: string;
+}
+
+function getAuthHeaders(): HeadersInit {
+  if (typeof window === "undefined") return { "Content-Type": "application/json" };
+  const token = localStorage.getItem("stockpulse_token");
+
+  return token
+    ? {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      }
+    : {
+        "Content-Type": "application/json",
+      };
+}
+
+// --- Watchlist API Calls (#21) ---
+
+/**
+ * Ruft alle Watchlist-Einträge des eingeloggten Nutzers ab.
+ */
+export async function fetchWatchlist(): Promise<WatchlistItem[]> {
+  try {
+    const res = await fetch(`${BASE_URL}/watchlist`, {
+      headers: getAuthHeaders(),
+    });
+
+    if (res.status === 401) {
+      return [];
+    }
+
+    if (!res.ok) {
+      throw new Error(`Fehler beim Laden der Watchlist: ${res.statusText}`);
+    }
+
+    return await res.json();
+  } catch (error) {
+    console.error("fetchWatchlist error:", error);
+    return [];
+  }
+}
+
+/**
+ * Fügt einen Ticker zur Watchlist des Nutzers hinzu.
+ */
+export async function addToWatchlist(symbol: string): Promise<WatchlistItem> {
+  const cleanSymbol = symbol.trim().toUpperCase();
+  const res = await fetch(`${BASE_URL}/watchlist/${cleanSymbol}`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(
+      errorData?.detail || `Fehler beim Hinzufügen von ${cleanSymbol} zur Watchlist`
+    );
+  }
+
+  return await res.json();
+}
+
+/**
+ * Entfernt einen Ticker aus der Watchlist des Nutzers.
+ */
+export async function removeFromWatchlist(symbol: string): Promise<boolean> {
+  const cleanSymbol = symbol.trim().toUpperCase();
+  const res = await fetch(`${BASE_URL}/watchlist/${cleanSymbol}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  });
+
+  if (!res.ok && res.status !== 404) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(
+      errorData?.detail || `Fehler beim Entfernen von ${cleanSymbol} aus der Watchlist`
+    );
+  }
+
+  return res.ok;
+}
