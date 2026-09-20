@@ -1,7 +1,9 @@
 "use client";
 
 import React from "react";
-import { WatchlistItem } from "@/lib/api";
+import { WatchlistSummaryItem } from "@/lib/api";
+import { Sparkline } from "@/components/Sparkline";
+import { formatCurrency, SupportedCurrency } from "@/lib/utils"; // <-- NEU
 import {
   Bookmark,
   Plus,
@@ -9,19 +11,20 @@ import {
   Trash2,
   X,
   TrendingUp,
-  Loader2,
 } from "lucide-react";
 
 interface WatchlistSidebarProps {
   isOpen: boolean;
   onClose: () => void;
-  items: WatchlistItem[];
+  items: WatchlistSummaryItem[];
   activeSymbol: string;
   onSelectSymbol: (symbol: string) => void;
   onRemoveSymbol: (symbol: string, e: React.MouseEvent) => void;
   onToggleCurrent: () => void;
   isCurrentSaved: boolean;
   isLoading?: boolean;
+  displayCurrency: SupportedCurrency; // <-- NEU
+  fxRate: number;                     // <-- NEU
 }
 
 export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
@@ -34,10 +37,12 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
   onToggleCurrent,
   isCurrentSaved,
   isLoading = false,
+  displayCurrency,
+  fxRate,
 }) => {
   return (
     <>
-      {/* Mobile Backdrop / Overlay */}
+      {/* Mobile Overlay */}
       {isOpen && (
         <div
           onClick={onClose}
@@ -48,14 +53,14 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed md:sticky top-[57px] left-0 z-40 h-[calc(100vh-57px)] w-72 bg-slate-900/95 md:bg-slate-900/60 backdrop-blur-md border-r border-slate-800/80 flex flex-col transition-all duration-300 ease-in-out shrink-0 ${
+        className={`fixed md:sticky top-[57px] left-0 z-40 h-[calc(100vh-57px)] w-80 bg-slate-900/95 md:bg-slate-900/60 backdrop-blur-md border-r border-slate-800/80 flex flex-col transition-all duration-300 ease-in-out shrink-0 ${
           isOpen
-            ? "translate-x-0 md:w-72 md:opacity-100"
-            : "-translate-x-full md:w-0 md:opacity-0 md:overflow-hidden md:border-r-0 pointer-events-none md:pointer-events-none"
+            ? "translate-x-0 md:w-80 md:opacity-100"
+            : "-translate-x-full md:w-0 md:opacity-0 md:overflow-hidden md:border-r-0 pointer-events-none"
         }`}
       >
         {/* Sidebar Header */}
-        <div className="p-4 border-b border-slate-800/80 flex items-center justify-between min-w-[288px]">
+        <div className="p-4 border-b border-slate-800/80 flex items-center justify-between min-w-[320px]">
           <div className="flex items-center gap-2">
             <Bookmark className="w-4 h-4 text-indigo-400" />
             <h2 className="font-semibold text-sm tracking-tight text-slate-200">
@@ -66,7 +71,6 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
             </span>
           </div>
 
-          {/* Close Button für Mobile */}
           <button
             type="button"
             onClick={onClose}
@@ -76,8 +80,8 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
           </button>
         </div>
 
-        {/* Aktuellen Ticker hinzufügen/entfernen Action-Card */}
-        <div className="p-3 border-b border-slate-800/60 bg-slate-950/40 min-w-[288px]">
+        {/* Aktuellen Ticker speichern Action */}
+        <div className="p-3 border-b border-slate-800/60 bg-slate-950/40 min-w-[320px]">
           <button
             type="button"
             onClick={onToggleCurrent}
@@ -103,12 +107,16 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
           </button>
         </div>
 
-        {/* Watchlist Item-Liste */}
-        <div className="flex-1 overflow-y-auto p-2 space-y-1 min-w-[288px]">
-          {isLoading ? (
-            <div className="flex flex-col items-center justify-center py-10 text-slate-500 gap-2">
-              <Loader2 className="w-5 h-5 animate-spin text-indigo-500" />
-              <span className="text-xs">Lade Watchlist...</span>
+        {/* Item-Liste mit Skeleton-Loader */}
+        <div className="flex-1 overflow-y-auto p-2 space-y-1 min-w-[320px]">
+          {isLoading && items.length === 0 ? (
+            <div className="p-2 space-y-2">
+              {[1, 2, 3, 4].map((n) => (
+                <div
+                  key={n}
+                  className="h-14 rounded-lg bg-slate-800/40 animate-pulse border border-slate-800/50"
+                />
+              ))}
             </div>
           ) : items.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center text-slate-500">
@@ -122,37 +130,72 @@ export const WatchlistSidebar: React.FC<WatchlistSidebarProps> = ({
             items.map((item) => {
               const isActive =
                 item.symbol.toUpperCase() === activeSymbol.toUpperCase();
+              const isPositiveChange = (item.change_percent_24h ?? 0) >= 0;
 
               return (
                 <div
                   key={item.id}
                   onClick={() => onSelectSymbol(item.symbol)}
-                  className={`group flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-medium cursor-pointer transition-all border select-none ${
+                  className={`group relative flex items-center justify-between p-2.5 rounded-lg text-xs cursor-pointer transition-all border select-none ${
                     isActive
                       ? "bg-indigo-600/15 border-indigo-500/40 text-white shadow-sm shadow-indigo-950/50"
-                      : "bg-slate-900/40 border-transparent text-slate-300 hover:bg-slate-800/60 hover:text-white hover:border-slate-800"
+                      : "bg-slate-900/40 border-slate-800/50 text-slate-300 hover:bg-slate-800/60 hover:text-white hover:border-slate-700"
                   }`}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                        isActive ? "bg-indigo-400 shadow-sm shadow-indigo-400" : "bg-slate-600"
-                      }`}
-                    />
-                    <span className="font-semibold tracking-wide truncate">
-                      {item.symbol}
+                  {/* Symbol & Name */}
+                  <div className="flex flex-col min-w-0 pr-2">
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          isActive ? "bg-indigo-400" : "bg-slate-600"
+                        }`}
+                      />
+                      <span className="font-bold tracking-wide text-slate-100">
+                        {item.symbol}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 truncate max-w-[90px]">
+                      {item.name || item.symbol}
                     </span>
                   </div>
 
-                  <button
-                    type="button"
-                    aria-label={`Entferne ${item.symbol}`}
-                    onClick={(e) => onRemoveSymbol(item.symbol, e)}
-                    className="opacity-0 group-hover:opacity-100 hover:text-rose-400 text-slate-500 transition-opacity p-1 rounded hover:bg-slate-800 shrink-0"
-                    title={`${item.symbol} entfernen`}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {/* Sparkline & Preisblock */}
+                  <div className="flex items-center gap-3 shrink-0">
+                    <Sparkline data={item.sparkline_1mo} width={60} height={22} />
+
+                    <div className="text-right min-w-[70px]">
+                      <div className="font-semibold text-slate-200">
+                        {item.current_price != null
+                          ? formatCurrency(
+                              item.current_price,
+                              item.currency || "USD",
+                              displayCurrency,
+                              fxRate
+                            )
+                          : "—"}
+                      </div>
+                      <div
+                        className={`text-[10px] font-medium ${
+                          isPositiveChange ? "text-emerald-400" : "text-rose-400"
+                        }`}
+                      >
+                        {item.change_percent_24h != null
+                          ? `${isPositiveChange ? "+" : ""}${item.change_percent_24h.toFixed(1)}%`
+                          : "—"}
+                      </div>
+                    </div>
+
+                    {/* Delete-Button */}
+                    <button
+                      type="button"
+                      aria-label={`Entferne ${item.symbol}`}
+                      onClick={(e) => onRemoveSymbol(item.symbol, e)}
+                      className="opacity-0 group-hover:opacity-100 hover:text-rose-400 text-slate-500 transition-opacity p-1 rounded hover:bg-slate-800"
+                      title={`${item.symbol} entfernen`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               );
             })

@@ -335,3 +335,37 @@ export async function removeFromWatchlist(symbol: string): Promise<boolean> {
 
   return res.ok;
 }
+
+export interface WatchlistSummaryItem {
+  id: number;
+  symbol: string;
+  name?: string;
+  currency: string;
+  current_price?: number | null;
+  change_percent_24h?: number | null;
+  sparkline_1mo: number[];
+}
+
+/**
+ * Ruft die Watchlist inklusive aggregierter 24h-Preise und 1-Monats-Sparklines ab.
+ */
+export async function fetchWatchlistSummary(): Promise<WatchlistSummaryItem[]> {
+  try {
+    const res = await fetch(`${BASE_URL}/watchlist/summary`, {
+      headers: getAuthHeaders(),
+    });
+
+    if (res.status === 401) {
+      return [];
+    }
+
+    if (!res.ok) {
+      throw new Error(`Fehler beim Laden der Watchlist-Summary: ${res.statusText}`);
+    }
+
+    return await res.json();
+  } catch (error) {
+    console.error("fetchWatchlistSummary error:", error);
+    return [];
+  }
+}

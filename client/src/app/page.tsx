@@ -6,12 +6,12 @@ import {
   fetchStockHistory,
   fetchStockQuote,
   fetchFxRate,
-  fetchWatchlist,
+  fetchWatchlistSummary,
   addToWatchlist,
   removeFromWatchlist,
   StockQuote,
   ChartPoint,
-  WatchlistItem,
+  WatchlistSummaryItem,
 } from "@/lib/api";
 import { formatCurrency, formatNumber, SupportedCurrency } from "@/lib/utils";
 import { StockChart } from "@/components/StockChart";
@@ -59,8 +59,8 @@ function DashboardContent() {
   const [displayCurrency, setDisplayCurrency] = useState<SupportedCurrency>("USD");
   const [fxRate, setFxRate] = useState<number>(1.08);
 
-  // Watchlist States & Sidebar Toggle (#28)
-  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
+  // Watchlist States & Sidebar Toggle (#28 & #29)
+  const [watchlist, setWatchlist] = useState<WatchlistSummaryItem[]>([]);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
@@ -80,24 +80,25 @@ function DashboardContent() {
     });
   };
 
-  // Watchlist beim Start laden
-  useEffect(() => {
-    async function initWatchlist() {
-      const token = localStorage.getItem("stockpulse_token");
-      if (!token) return;
+  // Watchlist-Zusammenfassung mit Sparklines und Preisen laden (#29)
+  const loadWatchlistData = useCallback(async () => {
+    const token = localStorage.getItem("stockpulse_token");
+    if (!token) return;
 
-      setWatchlistLoading(true);
-      try {
-        const items = await fetchWatchlist();
-        setWatchlist(items);
-      } catch (err) {
-        console.warn("Watchlist konnte nicht geladen werden:", err);
-      } finally {
-        setWatchlistLoading(false);
-      }
+    setWatchlistLoading(true);
+    try {
+      const items = await fetchWatchlistSummary();
+      setWatchlist(items);
+    } catch (err) {
+      console.warn("Watchlist-Summary konnte nicht geladen werden:", err);
+    } finally {
+      setWatchlistLoading(false);
     }
-    initWatchlist();
   }, []);
+
+  useEffect(() => {
+    loadWatchlistData();
+  }, [loadWatchlistData]);
 
   // URL synchronisieren, wenn ein neuer Ticker ausgewählt wird
   const updateUrlSymbol = useCallback(
@@ -118,7 +119,7 @@ function DashboardContent() {
     updateUrlSymbol(cleanSymbol);
   };
 
-  // Watchlist Handlers (#28)
+  // Watchlist Handlers (#28 & #29)
   const isCurrentSaved = watchlist.some(
     (item) => item.symbol.toUpperCase() === ticker.toUpperCase()
   );
@@ -136,8 +137,8 @@ function DashboardContent() {
         await removeFromWatchlist(clean);
         setWatchlist((prev) => prev.filter((i) => i.symbol.toUpperCase() !== clean));
       } else {
-        const newItem = await addToWatchlist(clean);
-        setWatchlist((prev) => [...prev, newItem]);
+        await addToWatchlist(clean);
+        await loadWatchlistData();
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Fehler bei der Watchlist-Aktion";
@@ -365,7 +366,7 @@ function DashboardContent() {
         </div>
       </header>
 
-      {/* Main Body Layout mit linksseitiger Watchlist-Sidebar (#28) */}
+      {/* Main Body Layout mit linksseitiger Watchlist-Sidebar (#28 & #29) */}
       <div className="flex-1 flex overflow-hidden">
         <WatchlistSidebar
           isOpen={isSidebarOpen}
@@ -377,6 +378,8 @@ function DashboardContent() {
           onToggleCurrent={handleToggleWatchlist}
           isCurrentSaved={isCurrentSaved}
           isLoading={watchlistLoading}
+          displayCurrency={displayCurrency}
+          fxRate={fxRate}
         />
 
         {/* Hauptinhalt passt sich flexibel der Sidebar an */}
