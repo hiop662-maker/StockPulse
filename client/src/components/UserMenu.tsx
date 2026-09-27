@@ -1,15 +1,16 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import Link from "next/link";
 import { LogIn, LogOut, ChevronDown, Settings } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { SettingsModal } from "@/components/SettingsModal";
+import { AuthModal } from "@/components/AuthModal";
 
 export function UserMenu() {
   const { user, logout, isLoading } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -28,13 +29,20 @@ export function UserMenu() {
 
   if (!user) {
     return (
-      <Link
-        href="/login"
-        className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-sm cursor-pointer"
-      >
-        <LogIn className="w-3.5 h-3.5" />
-        <span>Anmelden</span>
-      </Link>
+      <>
+        <button
+          onClick={() => setIsAuthOpen(true)}
+          className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow-sm cursor-pointer"
+        >
+          <LogIn className="w-3.5 h-3.5" />
+          <span>Anmelden</span>
+        </button>
+
+        <AuthModal
+          isOpen={isAuthOpen}
+          onClose={() => setIsAuthOpen(false)}
+        />
+      </>
     );
   }
 

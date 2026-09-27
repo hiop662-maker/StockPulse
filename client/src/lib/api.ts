@@ -369,3 +369,44 @@ export async function fetchWatchlistSummary(): Promise<WatchlistSummaryItem[]> {
     return [];
   }
 }
+
+export async function requestPasswordReset(email: string): Promise<{ message: string }> {
+  const res = await fetch("/api/auth/forgot-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+
+  const contentType = res.headers.get("content-type");
+  if (!contentType || !contentType.includes("application/json")) {
+    throw new Error(`Serverfehler (${res.status}): Endpunkt nicht erreichbar.`);
+  }
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || "Fehler beim Anfordern des Reset-Links.");
+  }
+  return data;
+}
+
+export async function resetPassword(
+  token: string,
+  new_password: string
+): Promise<{ message: string }> {
+  const res = await fetch("/api/auth/reset-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, new_password }),
+  });
+
+  const contentType = res.headers.get("content-type");
+  if (!contentType || !contentType.includes("application/json")) {
+    throw new Error(`Serverfehler (${res.status}): Endpunkt nicht erreichbar.`);
+  }
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || "Fehler beim Zurücksetzen des Passworts.");
+  }
+  return data;
+}

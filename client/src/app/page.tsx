@@ -21,6 +21,7 @@ import { UserMenu } from "@/components/UserMenu";
 import { StockSearch } from "@/components/StockSearch";
 import { StockErrorState } from "@/components/StockErrorState";
 import { WatchlistSidebar } from "@/components/WatchlistSidebar";
+import { useAuth } from "@/context/AuthContext";
 import {
   Sparkles,
   TrendingUp,
@@ -35,6 +36,13 @@ import {
 function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useAuth();
+
+  // Verhindert Hydration Mismatches bei Datums-/Zeitformaten
+  const [hasMounted, setHasMounted] = useState(false);
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   // 1. Initialen Ticker aus URL-Parameter 'symbol' lesen (Fallback: NVDA)
   const initialSymbol = searchParams.get("symbol")?.toUpperCase() || "NVDA";
@@ -97,8 +105,12 @@ function DashboardContent() {
   }, []);
 
   useEffect(() => {
-    loadWatchlistData();
-  }, [loadWatchlistData]);
+    if (user) {
+      loadWatchlistData();
+    } else {
+      setWatchlist([]);
+    }
+  }, [user, loadWatchlistData]);
 
   // URL synchronisieren, wenn ein neuer Ticker ausgewählt wird
   const updateUrlSymbol = useCallback(
@@ -125,8 +137,7 @@ function DashboardContent() {
   );
 
   const handleToggleWatchlist = async () => {
-    const token = localStorage.getItem("stockpulse_token");
-    if (!token) {
+    if (!user) {
       alert("Bitte logge dich ein, um Favoriten in deiner Watchlist zu speichern.");
       return;
     }
@@ -256,6 +267,7 @@ function DashboardContent() {
       : "N/A";
 
   const quoteName = quote?.name || quote?.shortName || ticker;
+  const timeString = hasMounted ? lastUpdated.toLocaleTimeString("de-DE") : "";
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
@@ -300,7 +312,7 @@ function DashboardContent() {
               type="button"
               onClick={refreshQuoteOnly}
               disabled={isRefreshing}
-              title={`Letzte Aktualisierung: ${lastUpdated.toLocaleTimeString("de-DE")}`}
+              title={timeString ? `Letzte Aktualisierung: ${timeString}` : "Aktualisieren"}
               className="text-slate-400 hover:text-white transition disabled:opacity-50 cursor-pointer"
             >
               <RefreshCw
@@ -408,9 +420,11 @@ function DashboardContent() {
                       <span className="text-xs font-semibold px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
                         {quote?.symbol || ticker}
                       </span>
-                      <span className="text-[11px] text-slate-500">
-                        Aktualisiert: {lastUpdated.toLocaleTimeString("de-DE")}
-                      </span>
+                      {timeString && (
+                        <span className="text-[11px] text-slate-500">
+                          Aktualisiert: {timeString}
+                        </span>
+                      )}
                     </div>
                     <div className="text-3xl font-extrabold mt-1">
                       {formatCurrency(

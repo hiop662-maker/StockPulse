@@ -15,6 +15,9 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Öffentliche Pfade, die ohne Login erreichbar sein müssen
+const PUBLIC_PATHS = ["/login", "/reset-password"];
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -24,7 +27,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    const isPublicPath = PUBLIC_PATHS.some((p) => pathname.startsWith(p));
     const storedToken = localStorage.getItem("stockpulse_token");
+
     if (storedToken) {
       setToken(storedToken);
       getMeApi(storedToken)
@@ -36,15 +41,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           localStorage.removeItem("stockpulse_token");
           setToken(null);
           setUser(null);
-          if (pathname !== "/login") {
+          if (!isPublicPath) {
             router.replace("/login");
           }
         })
         .finally(() => setIsLoading(false));
     } else {
       setIsLoading(false);
-      // Kein Token vorhanden -> Weiterleitung zur Login-Seite
-      if (pathname !== "/login") {
+      // Kein Token vorhanden -> Nur umleiten, wenn Pfad nicht öffentlich ist
+      if (!isPublicPath) {
         router.replace("/login");
       }
     }
