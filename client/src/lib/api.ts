@@ -410,3 +410,27 @@ export async function resetPassword(
   }
   return data;
 }
+
+export interface BullBearAnalysis {
+  symbol: string;
+  company_name: string;
+  summary: string;
+  risk_level: "Niedrig" | "Moderat" | "Erhöht" | "Hoch";
+  bull_points: string[];
+  bear_points: string[];
+  disclaimer: string;
+}
+
+export async function fetchBullBearAnalysis(symbol: string): Promise<BullBearAnalysis> {
+  const res = await fetch("/api/ai/bull-bear", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ symbol }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.detail || "Bull/Bear Analyse konnte nicht geladen werden.");
+  }
+  return res.json();
+}

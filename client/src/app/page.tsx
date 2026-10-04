@@ -32,6 +32,7 @@ import {
   RefreshCw,
   PanelLeft,
 } from "lucide-react";
+import { BullBearCard } from "@/components/BullBearCard";
 
 function DashboardContent() {
   const router = useRouter();
@@ -520,6 +521,9 @@ function DashboardContent() {
                   </div>
                 </div>
 
+                {/* KI Bull vs. Bear Card */}
+                <BullBearCard symbol={ticker} />
+                
                 {/* Chart */}
                 <StockChart
                   data={history}
