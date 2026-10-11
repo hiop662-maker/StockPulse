@@ -140,10 +140,32 @@ export async function streamAiAdvisor(
 
 export interface User {
   id: number;
-  username: string | null;
   email: string;
-  avatar_url: string | null;
-  created_at?: string;
+  username?: string;
+  avatar_url?: string;
+  ai_features_enabled: boolean;
+}
+
+export async function updateSettingsApi(
+  token: string,
+  settings: { ai_features_enabled: boolean }
+): Promise<User> {
+  // Wichtig: Einheitlicher Präfix passend zu deinen anderen Auth-Endpunkten
+  const res = await fetch(`${BASE_URL}/auth/settings`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(settings),
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.detail || "Fehler beim Speichern der Einstellungen.");
+  }
+
+  return res.json();
 }
 
 export interface AuthResponse {
@@ -371,7 +393,7 @@ export async function fetchWatchlistSummary(): Promise<WatchlistSummaryItem[]> {
 }
 
 export async function requestPasswordReset(email: string): Promise<{ message: string }> {
-  const res = await fetch("/api/auth/forgot-password", {
+  const res = await fetch(`${BASE_URL}/auth/forgot-password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
@@ -393,7 +415,7 @@ export async function resetPassword(
   token: string,
   new_password: string
 ): Promise<{ message: string }> {
-  const res = await fetch("/api/auth/reset-password", {
+  const res = await fetch(`${BASE_URL}/auth/reset-password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token, new_password }),
@@ -419,13 +441,20 @@ export interface BullBearAnalysis {
   bull_points: string[];
   bear_points: string[];
   disclaimer: string;
+  generated_at?: string;
 }
 
-export async function fetchBullBearAnalysis(symbol: string): Promise<BullBearAnalysis> {
-  const res = await fetch("/api/ai/bull-bear", {
+export async function fetchBullBearAnalysis(
+  symbol: string,
+  forceRefresh: boolean = false
+): Promise<BullBearAnalysis> {
+  const res = await fetch(`${BASE_URL}/ai/bull-bear`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ symbol }),
+    body: JSON.stringify({
+      symbol: symbol.trim().toUpperCase(),
+      force_refresh: forceRefresh,
+    }),
   });
 
   if (!res.ok) {

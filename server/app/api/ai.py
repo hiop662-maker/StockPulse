@@ -44,7 +44,7 @@ async def chat_advisor_stream(req: AdvisorRequest):
 @router.post("/bull-bear", response_model=BullBearAnalysis)
 async def get_bull_bear_case(payload: BullBearRequest):
     try:
-        return await generate_bull_bear_analysis(payload.symbol)
+        return await generate_bull_bear_analysis(payload.symbol, force_refresh=payload.force_refresh)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except Exception as e:

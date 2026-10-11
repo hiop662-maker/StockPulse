@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -57,11 +58,18 @@ class UpdateSettingsRequest(BaseModel):
     ai_features_enabled: bool
 
 
+class UpdateProfileRequest(BaseModel):
+    username: Optional[str] = None
+    avatar_url: Optional[str] = None
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     email: str
+    username: Optional[str] = None
+    avatar_url: Optional[str] = None
     ai_features_enabled: bool = True
 
 
@@ -174,13 +182,28 @@ def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
-@router.patch("/settings", response_model=UserResponse)
-def update_settings(
-    req: UpdateSettingsRequest,
+@router.put("/profile", response_model=UserResponse)
+def update_profile(
+    payload: UpdateProfileRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    current_user.ai_features_enabled = req.ai_features_enabled
+    if payload.username is not None:
+        current_user.username = payload.username
+    if payload.avatar_url is not None:
+        current_user.avatar_url = payload.avatar_url
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+@router.patch("/settings", response_model=UserResponse)
+def update_user_settings(
+    payload: UpdateSettingsRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    current_user.ai_features_enabled = payload.ai_features_enabled
     db.commit()
     db.refresh(current_user)
     return current_user

@@ -1,9 +1,14 @@
-from typing import List, Literal
+from datetime import datetime, timezone
+from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
 class BullBearRequest(BaseModel):
     symbol: str = Field(..., description="Aktien-Ticker, z. B. NVDA oder AAPL")
+    force_refresh: bool = Field(
+        default=False,
+        description="Erzwingt eine Neu-Generierung unter Umgehung des Caches",
+    )
 
 
 class BullBearAnalysis(BaseModel):
@@ -31,4 +36,8 @@ class BullBearAnalysis(BaseModel):
     disclaimer: str = Field(
         default="Keine Anlageberatung. Dient ausschließlich Informations- und Analysezwecken.",
         description="Pflicht-Disclaimer",
+    )
+    generated_at: Optional[str] = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat(),
+        description="ISO-Zeitstempel der Analyse-Erstellung",
     )

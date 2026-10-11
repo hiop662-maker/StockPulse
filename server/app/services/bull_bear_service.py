@@ -1,5 +1,6 @@
 import asyncio
 import time
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from google import genai
 from google.genai import types
@@ -8,9 +9,9 @@ from app.core.config import settings
 from app.schemas.ai import BullBearAnalysis
 from app.api.stocks import get_stock_quote
 
-# 6 Stunden TTL Cache: { "TICKER": { "data": BullBearAnalysis, "expires_at": float } }
+# 24 Stunden TTL Cache (tägliches Caching)
 _CACHE: Dict[str, Dict[str, Any]] = {}
-CACHE_TTL_SECONDS = 6 * 60 * 60
+CACHE_TTL_SECONDS = 24 * 60 * 60
 
 
 def _get_from_cache(symbol: str) -> Optional[BullBearAnalysis]:
@@ -29,13 +30,23 @@ def _save_to_cache(symbol: str, data: BullBearAnalysis) -> None:
     }
 
 
-async def generate_bull_bear_analysis(symbol: str) -> BullBearAnalysis:
-    clean_symbol = symbol.strip().upper()
-    cached = _get_from_cache(clean_symbol)
-    if cached:
-        return cached
+def clear_bull_bear_cache(symbol: Optional[str] = None) -> None:
+    """Hilfsfunktion zum Löschen des Caches (für Tests und Refreshes)."""
+    if symbol:
+        _CACHE.pop(symbol.upper(), None)
+    else:
+        _CACHE.clear()
 
-    # Reale Fundamentaldaten aus bestehendem Service beziehen (Anti-Halluzination)
+
+async def generate_bull_bear_analysis(symbol: str, force_refresh: bool = False) -> BullBearAnalysis:
+    clean_symbol = symbol.strip().upper()
+
+    if not force_refresh:
+        cached = _get_from_cache(clean_symbol)
+        if cached:
+            return cached
+
+    # Reale Fundamentaldaten aus bestehendem Service beziehen
     quote = await get_stock_quote(clean_symbol)
     if not quote:
         raise ValueError(f"Keine Kursdaten für '{clean_symbol}' gefunden.")
@@ -54,7 +65,7 @@ async def generate_bull_bear_analysis(symbol: str) -> BullBearAnalysis:
     - Name: {quote.name or quote.shortName or clean_symbol}
     - Aktueller Kurs: {quote.currentPrice} {quote.currency}
     - KGV (Trailing / Forward): {quote.trailingPE or 'N/A'} / {quote.forwardPE or 'N/A'}
-    - 52-Wochen Spanne: {quote.fiftyTwoWeekLow} - {quote.fiftyTwoWeekHigh} {quote.currency}
+    - 52-Wochen Spanne: {quote.fiftyTwoWeekLow} – {quote.fiftyTwoWeekHigh} {quote.currency}
     - Marktkapitalisierung: {quote.marketCap or 'N/A'}
     - Analysten-Konsens: {quote.recommendationKey or 'N/A'}
 
@@ -65,7 +76,6 @@ async def generate_bull_bear_analysis(symbol: str) -> BullBearAnalysis:
     client = genai.Client(api_key=settings.GEMINI_API_KEY)
     model_name = getattr(settings, "GEMINI_MODEL", "gemini-3.6-flash")
 
-    # Bis zu 3 Versuche bei temporären 503-Überlastungen
     for attempt in range(3):
         try:
             response = client.models.generate_content(
@@ -79,6 +89,7 @@ async def generate_bull_bear_analysis(symbol: str) -> BullBearAnalysis:
                 ),
             )
             parsed = BullBearAnalysis.model_validate_json(response.text)
+            parsed.generated_at = datetime.now(timezone.utc).isoformat()
             _save_to_cache(clean_symbol, parsed)
             return parsed
         except Exception as e:

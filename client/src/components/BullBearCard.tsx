@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TrendingUp, TrendingDown, ShieldAlert, Sparkles, AlertCircle, RefreshCw } from "lucide-react";
+import {
+  TrendingUp,
+  TrendingDown,
+  ShieldAlert,
+  Sparkles,
+  AlertCircle,
+  RefreshCw,
+} from "lucide-react";
 import { fetchBullBearAnalysis, BullBearAnalysis } from "@/lib/api";
 
 interface BullBearCardProps {
@@ -11,23 +18,35 @@ interface BullBearCardProps {
 export function BullBearCard({ symbol }: BullBearCardProps) {
   const [data, setData] = useState<BullBearAnalysis | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
 
-  const loadAnalysis = async () => {
-    setIsLoading(true);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const loadAnalysis = async (forceRefresh: boolean = false) => {
+    if (forceRefresh) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
     setError(null);
+
     try {
-      const result = await fetchBullBearAnalysis(symbol);
+      const result = await fetchBullBearAnalysis(symbol, forceRefresh);
       setData(result);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Fehler bei der KI-Analyse");
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
-    loadAnalysis();
+    loadAnalysis(false);
   }, [symbol]);
 
   const getRiskBadgeColor = (level: string) => {
@@ -44,6 +63,17 @@ export function BullBearCard({ symbol }: BullBearCardProps) {
         return "bg-slate-800 text-slate-300 border-slate-700";
     }
   };
+
+  const formattedDate =
+    mounted && data?.generated_at
+      ? new Date(data.generated_at).toLocaleDateString("de-DE", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : null;
 
   if (isLoading) {
     return (
@@ -70,7 +100,7 @@ export function BullBearCard({ symbol }: BullBearCardProps) {
         </div>
         <button
           type="button"
-          onClick={loadAnalysis}
+          onClick={() => loadAnalysis(true)}
           className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 transition cursor-pointer"
         >
           <RefreshCw className="w-3 h-3" /> Wiederholen
@@ -93,17 +123,36 @@ export function BullBearCard({ symbol }: BullBearCardProps) {
           <span className="text-[11px] text-slate-500 font-medium">({data.symbol})</span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-[11px] text-slate-400 flex items-center gap-1">
-            <ShieldAlert className="w-3.5 h-3.5" /> Risiko:
-          </span>
-          <span
-            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${getRiskBadgeColor(
-              data.risk_level
-            )}`}
+        <div className="flex items-center gap-3">
+          {formattedDate && (
+            <span className="text-[10px] text-slate-400" title="Stand der KI-Analyse">
+              Stand: {formattedDate}
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={() => loadAnalysis(true)}
+            disabled={isRefreshing}
+            title="Analyse neu generieren (Cache umgehen)"
+            className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition disabled:opacity-50 cursor-pointer border border-slate-700"
           >
-            {data.risk_level}
-          </span>
+            <RefreshCw className={`w-3 h-3 ${isRefreshing ? "animate-spin text-indigo-400" : ""}`} />
+            Neu berechnen
+          </button>
+
+          <div className="flex items-center gap-1.5 pl-2 border-l border-slate-800">
+            <span className="text-[11px] text-slate-400 flex items-center gap-1">
+              <ShieldAlert className="w-3.5 h-3.5" /> Risiko:
+            </span>
+            <span
+              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${getRiskBadgeColor(
+                data.risk_level
+              )}`}
+            >
+              {data.risk_level}
+            </span>
+          </div>
         </div>
       </div>
 
