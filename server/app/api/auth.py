@@ -53,11 +53,16 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class UpdateSettingsRequest(BaseModel):
+    ai_features_enabled: bool
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     email: str
+    ai_features_enabled: bool = True
 
 
 # ---------------------------------------------------------
@@ -166,4 +171,16 @@ def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
+
+
+@router.patch("/settings", response_model=UserResponse)
+def update_settings(
+    req: UpdateSettingsRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    current_user.ai_features_enabled = req.ai_features_enabled
+    db.commit()
+    db.refresh(current_user)
     return current_user

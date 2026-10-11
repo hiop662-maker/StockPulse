@@ -13,6 +13,7 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
     avatar_url = Column(String, nullable=True)
+    ai_features_enabled = Column(Boolean, default=True, nullable=False)  # <-- Neu
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     watchlist = relationship("Watchlist", back_populates="user", cascade="all, delete-orphan")
 

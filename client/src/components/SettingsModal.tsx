@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
+  Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { updateProfileApi, changePasswordApi } from "@/lib/api";
@@ -20,7 +21,7 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-  const { user, token } = useAuth();
+  const { user, token, updateAiFeatures } = useAuth();
   const [mounted, setMounted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -28,6 +29,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [aiEnabled, setAiEnabled] = useState(user?.ai_features_enabled ?? true);
 
   const [profileMsg, setProfileMsg] = useState<{
     type: "success" | "error";
@@ -37,8 +39,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const [aiMsg, setAiMsg] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [isUpdatingAi, setIsUpdatingAi] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -49,6 +57,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     if (user) {
       setUsername(user.username || "");
       setAvatarUrl(user.avatar_url || "");
+      setAiEnabled(user.ai_features_enabled ?? true);
     }
   }, [user]);
 
@@ -91,6 +100,27 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       });
     } finally {
       setIsUpdatingProfile(false);
+    }
+  };
+
+  const handleToggleAi = async () => {
+    const nextVal = !aiEnabled;
+    setAiEnabled(nextVal);
+    setAiMsg(null);
+    setIsUpdatingAi(true);
+
+    try {
+      if (updateAiFeatures) {
+        await updateAiFeatures(nextVal);
+      }
+    } catch (err: unknown) {
+      setAiEnabled(!nextVal); // Revert bei Fehler
+      setAiMsg({
+        type: "error",
+        text: err instanceof Error ? err.message : "Einstellung konnte nicht gespeichert werden.",
+      });
+    } finally {
+      setIsUpdatingAi(false);
     }
   };
 
@@ -241,6 +271,49 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             )}
           </button>
         </form>
+
+        {/* KI-Funktionen Toggle */}
+        <div className="py-6 border-b border-slate-800">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+            KI-Funktionen
+          </h3>
+
+          {aiMsg && (
+            <div className="mb-3 p-3 rounded-lg flex items-center gap-2 text-xs bg-red-950/50 border border-red-800/60 text-red-300">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{aiMsg.text}</span>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl">
+            <div className="pr-4">
+              <span className="block text-xs font-medium text-slate-200">
+                KI-Analysen & Assistent aktivieren
+              </span>
+              <span className="block text-[11px] text-slate-400 mt-0.5">
+                Steuert Bull/Bear-Analysen und den AI-Chat zur Schonung von API-Kontingenten.
+              </span>
+            </div>
+
+            <button
+              type="button"
+              role="switch"
+              aria-checked={aiEnabled}
+              disabled={isUpdatingAi}
+              onClick={handleToggleAi}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50 ${
+                aiEnabled ? "bg-indigo-600" : "bg-slate-700"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                  aiEnabled ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+        </div>
 
         {/* Passwort ändern Formular */}
         <form onSubmit={handlePasswordSubmit} className="space-y-4 pt-6">

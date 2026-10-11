@@ -39,6 +39,9 @@ function DashboardContent() {
   const searchParams = useSearchParams();
   const { user } = useAuth();
 
+  // Status für aktivierte KI-Features (Fallback: true)
+  const isAiEnabled = user ? user.ai_features_enabled !== false : true;
+
   // Verhindert Hydration Mismatches bei Datums-/Zeitformaten
   const [hasMounted, setHasMounted] = useState(false);
   useEffect(() => {
@@ -362,18 +365,21 @@ function DashboardContent() {
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setIsChatOpen((prev) => !prev)}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
-              isChatOpen
-                ? "bg-indigo-500 text-white ring-2 ring-indigo-400/50"
-                : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20"
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            KI-Analyse
-          </button>
+          {/* AI Drawer Trigger nur anzeigen, wenn KI aktiviert ist */}
+          {isAiEnabled && (
+            <button
+              type="button"
+              onClick={() => setIsChatOpen((prev) => !prev)}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer ${
+                isChatOpen
+                  ? "bg-indigo-500 text-white ring-2 ring-indigo-400/50"
+                  : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20"
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              KI-Analyse
+            </button>
+          )}
 
           <UserMenu />
         </div>
@@ -521,8 +527,8 @@ function DashboardContent() {
                   </div>
                 </div>
 
-                {/* KI Bull vs. Bear Card */}
-                <BullBearCard symbol={ticker} />
+                {/* KI Bull vs. Bear Card nur anzeigen, wenn aktiviert */}
+                {isAiEnabled && <BullBearCard symbol={ticker} />}
                 
                 {/* Chart */}
                 <StockChart
@@ -538,11 +544,13 @@ function DashboardContent() {
         </main>
       </div>
 
-      {/* AI Chat Drawer */}
-      <AiChatDrawer
-        currentSymbol={ticker}
-        isOpen={isChatOpen}
-      />
+      {/* AI Chat Drawer nur rendern, wenn aktiviert */}
+      {isAiEnabled && (
+        <AiChatDrawer
+          currentSymbol={ticker}
+          isOpen={isChatOpen}
+        />
+      )}
     </div>
   );
 }
