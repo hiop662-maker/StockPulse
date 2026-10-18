@@ -74,9 +74,7 @@ export async function askAiAdvisor(
 ): Promise<AiAdvisorResponse> {
   const res = await fetch(`${BASE_URL}/ai/advisor`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify({
       symbol: symbol.toUpperCase(),
       question,
@@ -84,16 +82,14 @@ export async function askAiAdvisor(
     }),
   });
 
-  if (!res.ok) {
-    throw new Error(`Fehler bei der KI-Anfrage: ${res.statusText}`);
+if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Fehler bei der KI-Anfrage: ${res.statusText}`);
   }
 
   return res.json();
 }
 
-/**
- * Streamt die Antwort des KI-Analysten Token für Token
- */
 export async function streamAiAdvisor(
   symbol: string,
   question: string,
@@ -102,9 +98,7 @@ export async function streamAiAdvisor(
 ): Promise<void> {
   const res = await fetch(`${BASE_URL}/ai/advisor/stream`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: getAuthHeaders(),
     body: JSON.stringify({
       symbol: symbol.toUpperCase(),
       question,
@@ -112,7 +106,7 @@ export async function streamAiAdvisor(
     }),
   });
 
-  if (!res.ok || !res.body) {
+if (!res.ok || !res.body) {
     throw new Error(`Fehler bei der Streaming-Anfrage: ${res.statusText}`);
   }
 
@@ -144,6 +138,55 @@ export interface User {
   username?: string;
   avatar_url?: string;
   ai_features_enabled: boolean;
+  has_custom_api_key?: boolean;
+  api_key_last4?: string | null;
+}
+
+export interface UserApiKeyStatus {
+  has_custom_api_key: boolean;
+  api_key_last4: string | null;
+  message: string;
+}
+
+export async function updateUserApiKey(
+  token: string,
+  apiKey: string
+): Promise<UserApiKeyStatus> {
+  const res = await fetch(`${BASE_URL}/auth/api-key`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ api_key: apiKey.trim() }),
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(
+      error.detail || "Ungültiger Gemini-API-Key. Bitte überprüfe deine Eingabe."
+    );
+  }
+
+  return res.json();
+}
+
+export async function deleteUserApiKey(
+  token: string
+): Promise<UserApiKeyStatus> {
+  const res = await fetch(`${BASE_URL}/auth/api-key`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.detail || "Fehler beim Entfernen des API-Keys.");
+  }
+
+  return res.json();
 }
 
 export async function updateSettingsApi(
@@ -450,7 +493,7 @@ export async function fetchBullBearAnalysis(
 ): Promise<BullBearAnalysis> {
   const res = await fetch(`${BASE_URL}/ai/bull-bear`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: getAuthHeaders(),
     body: JSON.stringify({
       symbol: symbol.trim().toUpperCase(),
       force_refresh: forceRefresh,

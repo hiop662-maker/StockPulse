@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, ANY
 from fastapi.testclient import TestClient
 from app.main import app
 from app.schemas.ai import BullBearAnalysis
@@ -56,7 +56,7 @@ def test_bull_bear_success_default_cache(mock_generate):
     assert len(data["bear_points"]) == 3
     assert "disclaimer" in data
     assert "generated_at" in data
-    mock_generate.assert_called_once_with("NVDA", force_refresh=False)
+    mock_generate.assert_called_once_with("NVDA", force_refresh=False, user=None, db=ANY)
 
 
 @patch("app.api.ai.generate_bull_bear_analysis", new_callable=AsyncMock)
@@ -70,7 +70,7 @@ def test_bull_bear_force_refresh_flag(mock_generate):
     )
 
     assert response.status_code == 200
-    mock_generate.assert_called_once_with("NVDA", force_refresh=True)
+    mock_generate.assert_called_once_with("NVDA", force_refresh=True, user=None, db=ANY)
 
 
 @patch("app.api.ai.generate_bull_bear_analysis", new_callable=AsyncMock)

@@ -2,12 +2,16 @@ import asyncio
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
+from fastapi import HTTPException
 from google import genai
 from google.genai import types
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.db.models import User
 from app.schemas.ai import BullBearAnalysis
 from app.api.stocks import get_stock_quote
+from app.services.genai_client import get_genai_client, handle_genai_exception
 
 # 24 Stunden TTL Cache (tägliches Caching)
 _CACHE: Dict[str, Dict[str, Any]] = {}
@@ -38,7 +42,12 @@ def clear_bull_bear_cache(symbol: Optional[str] = None) -> None:
         _CACHE.clear()
 
 
-async def generate_bull_bear_analysis(symbol: str, force_refresh: bool = False) -> BullBearAnalysis:
+async def generate_bull_bear_analysis(
+    symbol: str,
+    force_refresh: bool = False,
+    user: Optional[User] = None,
+    db: Optional[Session] = None,
+) -> BullBearAnalysis:
     clean_symbol = symbol.strip().upper()
 
     if not force_refresh:
@@ -73,7 +82,8 @@ async def generate_bull_bear_analysis(symbol: str, force_refresh: bool = False) 
     und genau 3 bis 4 Bear-Punkte (Bewertungsrisiken, Zinsrisiken, Wettbewerbsdruck).
     """
 
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
+    is_custom_key = bool(user and user.encrypted_gemini_key)
+    client = get_genai_client(user=user, db=db) if user else genai.Client(api_key=settings.GEMINI_API_KEY)
     model_name = getattr(settings, "GEMINI_MODEL", "gemini-3.6-flash")
 
     for attempt in range(3):
@@ -92,8 +102,11 @@ async def generate_bull_bear_analysis(symbol: str, force_refresh: bool = False) 
             parsed.generated_at = datetime.now(timezone.utc).isoformat()
             _save_to_cache(clean_symbol, parsed)
             return parsed
+        except HTTPException:
+            raise
         except Exception as e:
             if ("503" in str(e) or "UNAVAILABLE" in str(e)) and attempt < 2:
                 await asyncio.sleep(2.0 * (attempt + 1))
                 continue
+            handle_genai_exception(e, is_custom_key=is_custom_key)
             raise e

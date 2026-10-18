@@ -12,18 +12,22 @@ from app.core.security import (
     SECRET_KEY,
     create_access_token,
     create_password_reset_token,
+    encrypt_api_key,
     get_password_hash,
+    mask_api_key_last4,
     verify_password,
     verify_password_reset_token,
 )
 from app.db.models import User
 from app.db.session import get_db
 from app.services.email import send_reset_password_email
+from app.services.genai_client import validate_gemini_api_key
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 security = HTTPBearer()
+optional_security = HTTPBearer(auto_error=False)
 
 
 # ---------------------------------------------------------
@@ -33,6 +37,7 @@ security = HTTPBearer()
 class UserRegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
+    username: Optional[str] = None
 
 
 class UserLoginRequest(BaseModel):
@@ -49,9 +54,9 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=8)
 
 
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8)
 
 
 class UpdateSettingsRequest(BaseModel):
@@ -63,6 +68,16 @@ class UpdateProfileRequest(BaseModel):
     avatar_url: Optional[str] = None
 
 
+class UserApiKeyUpdate(BaseModel):
+    api_key: str = Field(..., min_length=20, max_length=128)
+
+
+class UserApiKeyStatusResponse(BaseModel):
+    has_custom_api_key: bool
+    api_key_last4: Optional[str] = None
+    message: str
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -71,10 +86,18 @@ class UserResponse(BaseModel):
     username: Optional[str] = None
     avatar_url: Optional[str] = None
     ai_features_enabled: bool = True
+    has_custom_api_key: bool = False
+    api_key_last4: Optional[str] = None
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: Optional[UserResponse] = None
 
 
 # ---------------------------------------------------------
-# Auth Dependency
+# Auth Dependencies
 # ---------------------------------------------------------
 
 def get_current_user(
@@ -101,6 +124,22 @@ def get_current_user(
     return user
 
 
+def get_optional_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
+    db: Session = Depends(get_db),
+) -> Optional[User]:
+    if not credentials or not credentials.credentials:
+        return None
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            return None
+        return db.query(User).filter(User.id == int(user_id)).first()
+    except JWTError:
+        return None
+
+
 # ---------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------
@@ -120,6 +159,7 @@ def register(req: UserRegisterRequest, db: Session = Depends(get_db)):
 
     user = User(
         email=req.email,
+        username=req.username,
         hashed_password=get_password_hash(req.password),
     )
     db.add(user)
@@ -139,7 +179,7 @@ def login(req: UserLoginRequest, db: Session = Depends(get_db)):
         )
 
     access_token = create_access_token(data={"sub": str(user.id)})
-    return TokenResponse(access_token=access_token)
+    return TokenResponse(access_token=access_token, user=user)
 
 
 @router.post("/forgot-password", status_code=status.HTTP_200_OK)
@@ -197,6 +237,22 @@ def update_profile(
     return current_user
 
 
+@router.put("/password", status_code=status.HTTP_200_OK)
+def change_password(
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Das aktuelle Passwort ist nicht korrekt.",
+        )
+    current_user.hashed_password = get_password_hash(payload.new_password)
+    db.commit()
+    return {"message": "Passwort erfolgreich geändert."}
+
+
 @router.patch("/settings", response_model=UserResponse)
 def update_user_settings(
     payload: UpdateSettingsRequest,
@@ -207,3 +263,45 @@ def update_user_settings(
     db.commit()
     db.refresh(current_user)
     return current_user
+
+
+@router.put("/api-key", response_model=UserApiKeyStatusResponse)
+def upsert_user_api_key(
+    payload: UserApiKeyUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    clean_key = payload.api_key.strip()
+    if not validate_gemini_api_key(clean_key):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ungültiger Gemini-API-Key. Bitte überprüfe deine Eingabe.",
+        )
+
+    current_user.encrypted_gemini_key = encrypt_api_key(clean_key)
+    current_user.gemini_key_last4 = mask_api_key_last4(clean_key)
+    db.commit()
+    db.refresh(current_user)
+
+    return UserApiKeyStatusResponse(
+        has_custom_api_key=True,
+        api_key_last4=current_user.gemini_key_last4,
+        message="API-Key erfolgreich geprüft und verschlüsselt gespeichert.",
+    )
+
+
+@router.delete("/api-key", response_model=UserApiKeyStatusResponse)
+def delete_user_api_key(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    current_user.encrypted_gemini_key = None
+    current_user.gemini_key_last4 = None
+    db.commit()
+    db.refresh(current_user)
+
+    return UserApiKeyStatusResponse(
+        has_custom_api_key=False,
+        api_key_last4=None,
+        message="Persönlicher API-Key wurde entfernt.",
+    )

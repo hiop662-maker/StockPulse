@@ -11,9 +11,16 @@ import {
   AlertCircle,
   Loader2,
   Sparkles,
+  KeyRound,
+  Trash2,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { updateProfileApi, changePasswordApi } from "@/lib/api";
+import {
+  updateProfileApi,
+  changePasswordApi,
+  updateUserApiKey,
+  deleteUserApiKey,
+} from "@/lib/api";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -21,7 +28,7 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
-  const { user, token, updateAiFeatures } = useAuth();
+  const { user, token, updateAiFeatures, saveApiKey, removeApiKey } = useAuth();
   const [mounted, setMounted] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -30,6 +37,15 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [aiEnabled, setAiEnabled] = useState(user?.ai_features_enabled ?? true);
+
+  // BYOK State
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [hasCustomKey, setHasCustomKey] = useState<boolean>(
+    Boolean(user?.has_custom_api_key)
+  );
+  const [keyLast4, setKeyLast4] = useState<string | null>(
+    user?.api_key_last4 ?? null
+  );
 
   const [profileMsg, setProfileMsg] = useState<{
     type: "success" | "error";
@@ -47,17 +63,20 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [isUpdatingAi, setIsUpdatingAi] = useState(false);
+  const [isSavingApiKey, setIsSavingApiKey] = useState(false);
+  const [isDeletingApiKey, setIsDeletingApiKey] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Synchronisiere Formularfelder, wenn sich der User ändert
   useEffect(() => {
     if (user) {
       setUsername(user.username || "");
       setAvatarUrl(user.avatar_url || "");
       setAiEnabled(user.ai_features_enabled ?? true);
+      setHasCustomKey(Boolean(user.has_custom_api_key));
+      setKeyLast4(user.api_key_last4 ?? null);
     }
   }, [user]);
 
@@ -114,13 +133,76 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         await updateAiFeatures(nextVal);
       }
     } catch (err: unknown) {
-      setAiEnabled(!nextVal); // Revert bei Fehler
+      setAiEnabled(!nextVal);
       setAiMsg({
         type: "error",
-        text: err instanceof Error ? err.message : "Einstellung konnte nicht gespeichert werden.",
+        text:
+          err instanceof Error
+            ? err.message
+            : "Einstellung konnte nicht gespeichert werden.",
       });
     } finally {
       setIsUpdatingAi(false);
+    }
+  };
+
+  const handleSaveApiKey = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = apiKeyInput.trim();
+    if (!trimmed) return;
+
+    setAiMsg(null);
+    setIsSavingApiKey(true);
+    try {
+      const res = saveApiKey
+        ? await saveApiKey(trimmed)
+        : await updateUserApiKey(token, trimmed);
+
+      setHasCustomKey(res.has_custom_api_key);
+      setKeyLast4(res.api_key_last4);
+      setApiKeyInput(""); // Sofort aus Sicherheitsgründen leeren
+      setAiMsg({
+        type: "success",
+        text: res.message,
+      });
+    } catch (err: unknown) {
+      setAiMsg({
+        type: "error",
+        text:
+          err instanceof Error
+            ? err.message
+            : "Ungültiger Gemini-API-Key. Bitte überprüfe deine Eingabe.",
+      });
+    } finally {
+      setIsSavingApiKey(false);
+    }
+  };
+
+  const handleDeleteApiKey = async () => {
+    setAiMsg(null);
+    setIsDeletingApiKey(true);
+    try {
+      const res = removeApiKey
+        ? await removeApiKey()
+        : await deleteUserApiKey(token);
+
+      setHasCustomKey(false);
+      setKeyLast4(null);
+      setApiKeyInput("");
+      setAiMsg({
+        type: "success",
+        text: res.message,
+      });
+    } catch (err: unknown) {
+      setAiMsg({
+        type: "error",
+        text:
+          err instanceof Error
+            ? err.message
+            : "Fehler beim Entfernen des API-Keys.",
+      });
+    } finally {
+      setIsDeletingApiKey(false);
     }
   };
 
@@ -272,16 +354,26 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </button>
         </form>
 
-        {/* KI-Funktionen Toggle */}
-        <div className="py-6 border-b border-slate-800">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+        {/* KI-Funktionen & BYOK */}
+        <div className="py-6 border-b border-slate-800 space-y-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
             KI-Funktionen
           </h3>
 
           {aiMsg && (
-            <div className="mb-3 p-3 rounded-lg flex items-center gap-2 text-xs bg-red-950/50 border border-red-800/60 text-red-300">
-              <AlertCircle className="w-4 h-4 shrink-0" />
+            <div
+              className={`p-3 rounded-lg flex items-center gap-2 text-xs ${
+                aiMsg.type === "success"
+                  ? "bg-emerald-950/50 border border-emerald-800/60 text-emerald-300"
+                  : "bg-red-950/50 border border-red-800/60 text-red-300"
+              }`}
+            >
+              {aiMsg.type === "success" ? (
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+              ) : (
+                <AlertCircle className="w-4 h-4 shrink-0" />
+              )}
               <span>{aiMsg.text}</span>
             </div>
           )}
@@ -313,6 +405,78 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               />
             </button>
           </div>
+
+          {/* BYOK Sektion - nur sichtbar wenn KI-Funktionen aktiviert sind */}
+          {aiEnabled && (
+            <form
+              onSubmit={handleSaveApiKey}
+              className="p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl space-y-3"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5 text-indigo-400" />
+                  <span className="text-xs font-medium text-slate-200">
+                    Persönlicher Gemini-API-Key (BYOK)
+                  </span>
+                </div>
+
+                {hasCustomKey && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-950/70 text-emerald-300 border border-emerald-800/60">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Hinterlegt (••••{keyLast4 || "****"})
+                  </span>
+                )}
+              </div>
+
+              <p className="text-[11px] text-slate-400">
+                Dein API-Key wird serverseitig mit AES/Fernet verschlüsselt gespeichert und niemals im Klartext übertragen.
+              </p>
+
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  placeholder={
+                    hasCustomKey
+                      ? "Neuen API-Key eingeben zum Überschreiben..."
+                      : "AIzaSy..."
+                  }
+                  aria-label="Gemini API-Key"
+                  className="flex-1 bg-slate-900 border border-slate-800 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none transition"
+                />
+                <button
+                  type="submit"
+                  disabled={isSavingApiKey || !apiKeyInput.trim()}
+                  className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer shrink-0"
+                >
+                  {isSavingApiKey ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    "Key speichern"
+                  )}
+                </button>
+              </div>
+
+              {hasCustomKey && (
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={handleDeleteApiKey}
+                    disabled={isDeletingApiKey}
+                    className="inline-flex items-center gap-1.5 text-[11px] font-medium text-red-400 hover:text-red-300 disabled:opacity-50 transition cursor-pointer"
+                  >
+                    {isDeletingApiKey ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-3 h-3" />
+                    )}
+                    Key löschen
+                  </button>
+                </div>
+              )}
+            </form>
+          )}
         </div>
 
         {/* Passwort ändern Formular */}
